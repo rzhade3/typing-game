@@ -1,0 +1,213 @@
+<html>
+	<head>
+		<title>Home</title>
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<h1>Typing Game</h1>
+			</div>
+			<div id="scoreboard">
+				<div id="score">
+					<p>Score: <span id="score-value">0</span></p>
+				</div>
+				<div id="speed">
+					<p>Speed: <span id="speed-value">0</span></p>
+				</div>
+				<p id="buffer">
+					Buffer: <span id="buffer-value"></span>
+				</p>
+			</div>
+		</div>
+		<div id="game">
+			<canvas id="canvas">
+			</canvas>
+		</div>
+	</body>
+
+	<style>
+		/* Header should take up 10% of the screen */
+		.header {
+			height: 10%;
+			width: 100%;
+			background-color: #000000;
+		}
+		.game {
+			height: 90%;
+			width: 100%;
+			background-color: #000000;
+		}
+		/* Put all divs in scoreboard inline with one another */
+		#logo, #scoreboard {
+			display: flex;
+			flex-direction: row;
+			justify-content: space-around;
+			align-items: center;
+		}
+	</style>
+	<script>
+		var dictionary;
+
+		const getDictionary = async () => {
+			// TODO: make dictionary list configurable by user
+			const response = await fetch('dictionary.txt');
+			const text = await response.text();
+			return text.split('\n');
+		}
+
+		const randomWord = () => {
+			return dictionary[Math.floor(randomNumber(0, dictionary.length))]
+		}
+
+		const randomNumber = (min, max) => {
+			return Math.random() * (max - min) + min;
+		}
+		const w = window.innerWidth;
+		const h = window.innerHeight * 0.9;
+		
+		const canvas = document.getElementById('canvas');
+		canvas.width = w;
+		canvas.height = h;
+	
+		const ctx = canvas.getContext("2d");
+		ctx.font = "30px sans-serif";
+
+		// Gameplay modifiers
+		const opts = {
+			init_speed: 25,
+			speed_increase: 1.1,
+			speed_cycles: 20,
+			spawn_chance: 0.25,
+		};
+
+		var score;
+		var words;
+		var cycles;
+		var speed;
+		var buffer;
+		// Instantiate variables
+		const initialize = function () {
+			score = 0;
+			words = [];
+			cycles = 0;
+			speed = opts.init_speed;
+			buffer = "";
+		};
+		
+		var Word = function (text, x, y, speed) {
+			this.text = text;
+			this.x = x;
+			this.y = y;
+			this.speed = speed;
+		};
+
+		var updateInterval;
+		const gameTick = function () {
+			// Increase speed every 10 frames
+			cycles += 1;
+			if (cycles % opts.speed_cycles == 0){
+				speed = Math.round(speed * opts.speed_increase);
+				document.getElementById('speed-value').innerText = speed;
+			}
+			ctx.clearRect(0, 0, w, h);
+			if (Math.random() < opts.spawn_chance) {
+				words.push(new Word(randomWord(), w, randomNumber(20, h), speed));
+			}
+			for (let i = 0; i < words.length; i++) {
+				const word = words[i];
+				word.x -= word.speed;
+				if (word.x < 0) {
+					// Losing condition here
+					words.splice(i, 1);
+					clearInterval(updateInterval);
+					state_machine.transition('game_over')
+				} else {
+					ctx.strokeText(word.text, word.x, word.y);
+				}	
+			}
+		};
+
+		var gameListener = async function (event) {
+			var key = event.key;
+			// Only accept alphanumerics, backspace and space
+			if (!key.match(/^[a-z0-9 ]$/i) && key !== 'Backspace' && key !== 'Enter') {
+				return;
+			}
+			// Capitalize key if shift is pressed
+			if (event.shiftKey) {
+				key = key.toUpperCase();
+			}
+			const bufferElem = document.getElementById('buffer-value');
+			if (key === ' ' || key === 'Enter') {
+				for (let i = 0; i < words.length; i++) {
+					const word = words[i];
+					if (word.text === buffer) {
+						score += Math.round(word.text.length * speed / 25);
+						document.getElementById('score-value').innerText = score;
+						words.splice(i, 1);
+						break;
+					}
+				}
+				buffer = "";
+			} else if (key === 'Backspace') {
+				buffer = buffer.slice(0, -1);
+			} else {
+				buffer += key;
+			}
+			bufferElem.innerText = buffer;
+		}
+
+		var startListener = function(event) {
+			if (event.key !== 'r') {
+				return;
+			}
+			state_machine.transition('game');
+		}
+
+		var startUpdate = async function() {
+			dictionary = await getDictionary();
+			ctx.clearRect(0, 0, w, h);
+			ctx.strokeText("Press 'r' to start", w / 2, h / 2);
+		}
+
+		var gameOverUpdate = async function() {
+			initialize();
+
+			ctx.clearRect(0, 0, w, h);
+			ctx.strokeText("Game Over", w / 2, h / 2);
+			ctx.strokeText("Press r to restart", w / 2, h / 2 + 50);
+		}
+
+		var state_machine = {
+			states: {
+				'start': {
+					'update': startUpdate,
+					listener: startListener,
+				},
+				'game': {
+					'update': async function () {
+						initialize();
+						updateInterval = setInterval(function () {
+							gameTick();
+						}, 250);
+					},
+					'listener': gameListener,
+				},
+				'game_over': {
+					'update': gameOverUpdate,
+					'listener': startListener,
+				}
+			},
+			transition: async function (state) {
+				document.removeEventListener('keyup', startListener);
+				document.removeEventListener('keyup', gameListener);
+				document.addEventListener('keyup', this.states[state].listener);
+				await this.states[state].update();
+			},
+		};
+
+		var state = 'start';
+
+		state_machine.transition(state)
+	</script>
+</html>
