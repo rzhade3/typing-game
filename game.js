@@ -31,10 +31,15 @@ const w = window.innerWidth;
 const h = window.innerHeight * 0.85;
 
 const canvas = document.getElementById('canvas');
-canvas.width = w;
-canvas.height = h;
+const dpr = window.devicePixelRatio || 1;
+
+canvas.width = w * dpr;
+canvas.height = h * dpr;
+canvas.style.width = w + 'px';
+canvas.style.height = h + 'px';
 
 const ctx = canvas.getContext("2d");
+ctx.scale(dpr, dpr);
 ctx.font = "bold 32px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
 
 // Gameplay modifiers
@@ -43,7 +48,7 @@ const opts = {
 	speed_increase: 1.1,
 	speed_cycles: 20,
 	spawn_chance: 0.25,
-	game_tick_interval: 250,
+	frame_interval: 250,
 	min_word_y: 20,
 	points_multiplier: 25,
 };
@@ -74,6 +79,8 @@ let words;
 let cycles;
 let speed;
 let buffer;
+let animationFrameId;
+let lastFrameTime;
 
 // Instantiate variables
 const initialize = function () {
@@ -99,10 +106,21 @@ class Word {
 	}
 }
 
-let updateInterval;
-
-const gameTick = function () {
-	// Increase speed every 10 frames
+const gameTick = function (currentTime) {
+	// Continue animation loop first
+	if (animationFrameId !== null) {
+		animationFrameId = requestAnimationFrame(gameTick);
+	}
+	
+	// Throttle to match original frame rate
+	if (!lastFrameTime) lastFrameTime = currentTime;
+	const elapsed = currentTime - lastFrameTime;
+	if (elapsed < opts.frame_interval) {
+		return;
+	}
+	lastFrameTime = currentTime;
+	
+	// Increase speed every 20 frames
 	cycles += 1;
 	if (cycles % opts.speed_cycles == 0){
 		speed = Math.round(speed * opts.speed_increase);
@@ -118,9 +136,9 @@ const gameTick = function () {
 		if (word.x < 0) {
 			// Losing condition here
 			words.splice(i, 1);
-			if (updateInterval) {
-				clearInterval(updateInterval);
-				updateInterval = null;
+			if (animationFrameId) {
+				cancelAnimationFrame(animationFrameId);
+				animationFrameId = null;
 			}
 			state_machine.transition('game_over')
 		} else {
@@ -234,13 +252,12 @@ const state_machine = {
 		'game': {
 			'update': async function () {
 				initialize();
-				if (updateInterval) {
-					clearInterval(updateInterval);
-					updateInterval = null;
+				lastFrameTime = null;
+				if (animationFrameId) {
+					cancelAnimationFrame(animationFrameId);
+					animationFrameId = null;
 				}
-				updateInterval = setInterval(function () {
-					gameTick();
-				}, opts.game_tick_interval);
+				animationFrameId = requestAnimationFrame(gameTick);
 			},
 			'listener': gameListener,
 		},
