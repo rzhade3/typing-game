@@ -40,7 +40,7 @@ canvas.style.height = h + 'px';
 
 const ctx = canvas.getContext("2d");
 ctx.scale(dpr, dpr);
-ctx.font = "bold 32px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
+ctx.font = "bold 32px 'SF Mono', 'Monaco', 'Cascadia Code', 'Consolas', monospace";
 
 // Cache DOM elements
 const scoreValueElem = document.getElementById('score-value');
@@ -138,6 +138,28 @@ const findNonOverlappingY = function() {
 	return randomNumber(opts.min_word_y, h);
 };
 
+const renderWords = function() {
+	ctx.clearRect(0, 0, w, h);
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'alphabetic';
+	
+	for (let i = 0; i < words.length; i++) {
+		const word = words[i];
+		// Check if buffer matches word prefix
+		if (buffer.length > 0 && word.text.startsWith(buffer)) {
+			// Render prefix in soft green, rest in default gray
+			ctx.fillStyle = 'rgb(180, 255, 180)';
+			ctx.fillText(buffer, word.x, word.y);
+			const prefixWidth = ctx.measureText(buffer).width;
+			ctx.fillStyle = 'rgb(140, 140, 145)';
+			ctx.fillText(word.text.substring(buffer.length), word.x + prefixWidth, word.y);
+		} else {
+			ctx.fillStyle = 'rgb(140, 140, 145)';
+			ctx.fillText(word.text, word.x, word.y);
+		}
+	}
+};
+
 const gameTick = function (currentTime) {
 	// Continue animation loop first
 	if (animationFrameId !== null) {
@@ -161,7 +183,6 @@ const gameTick = function (currentTime) {
 			lastDisplayedSpeed = speed;
 		}
 	}
-	ctx.clearRect(0, 0, w, h);
 	if (Math.random() < opts.spawn_chance) {
 		words.push(new Word(randomWord(), w, findNonOverlappingY(), speed));
 	}
@@ -176,11 +197,10 @@ const gameTick = function (currentTime) {
 				animationFrameId = null;
 			}
 			state_machine.transition('game_over')
-		} else {
-			ctx.fillStyle = '#ecf0f1';
-			ctx.fillText(word.text, word.x, word.y);
-		}	
+			return;
+		}
 	}
+	renderWords();
 };
 
 const gameListener = async function (event) {
@@ -215,6 +235,7 @@ const gameListener = async function (event) {
 		buffer += key;
 	}
 	bufferValueElem.innerText = buffer || '...';
+	renderWords();
 }
 
 const startListener = function(event) {
@@ -238,13 +259,32 @@ const startUpdate = async function() {
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	
-	ctx.fillStyle = '#3498db';
+	ctx.fillStyle = 'rgb(102, 170, 255)';
 	ctx.font = "bold 48px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-	ctx.fillText("Press 'R' to Start", w / 2, h / 2);
+	ctx.fillText("Press 'R' to Start", w / 2, h / 2 - 120);
 	
-	ctx.fillStyle = '#ecf0f1';
+	ctx.fillStyle = 'rgb(140, 140, 145)';
 	ctx.font = "24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-	ctx.fillText("Type the words before they disappear!", w / 2, h / 2 + 60);
+	ctx.fillText("Type the words before they disappear!", w / 2, h / 2 - 60);
+	
+	// Instructions
+	ctx.textAlign = 'center';
+	ctx.font = "20px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+	ctx.fillStyle = 'rgb(170, 120, 255)';
+	
+	let y = h / 2 + 20;
+	
+	ctx.fillText("R - Start or restart", w / 2, y);
+	y += 40;
+	ctx.fillText("Type - Type the words on screen", w / 2, y);
+	y += 40;
+	ctx.fillText("Space or Enter - Submit word", w / 2, y);
+	y += 40;
+	ctx.fillText("Backspace - Delete last character", w / 2, y);
+	
+	ctx.fillStyle = 'rgb(255, 204, 102)';
+	ctx.font = "18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+	ctx.fillText("💡 Type faster to score more points! Words speed up over time.", w / 2, h / 2 + 200);
 }
 
 const gameOverUpdate = async function() {
@@ -263,19 +303,19 @@ const gameOverUpdate = async function() {
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	
-	ctx.fillStyle = '#e74c3c';
+	ctx.fillStyle = 'rgb(255, 90, 90)';
 	ctx.font = "bold 56px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 	ctx.fillText("Game Over", w / 2, h / 2 - 80);
 	
-	ctx.fillStyle = '#3498db';
+	ctx.fillStyle = 'rgb(102, 170, 255)';
 	ctx.font = "bold 36px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 	ctx.fillText(`Final Score: ${finalScore}`, w / 2, h / 2 - 10);
 	
-	ctx.fillStyle = '#f39c12';
+	ctx.fillStyle = 'rgb(170, 120, 255)';
 	ctx.font = "bold 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 	ctx.fillText(`High Score: ${highScore}`, w / 2, h / 2 + 40);
 	
-	ctx.fillStyle = '#ecf0f1';
+	ctx.fillStyle = 'rgb(140, 140, 145)';
 	ctx.font = "24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 	ctx.fillText("Press 'R' to Restart", w / 2, h / 2 + 90);
 }
@@ -291,6 +331,7 @@ const state_machine = {
 		'game': {
 			'update': async function () {
 				initialize();
+				ctx.font = "bold 32px 'SF Mono', 'Monaco', 'Cascadia Code', 'Consolas', monospace";
 				lastFrameTime = null;
 				if (animationFrameId) {
 					cancelAnimationFrame(animationFrameId);
@@ -306,24 +347,16 @@ const state_machine = {
 		}
 	},
 	transition: async function (state) {
-		if (currentListener) {
-			document.removeEventListener('keydown', currentListener);
+		const newListener = this.states[state].listener;
+		if (currentListener !== newListener) {
+			if (currentListener) {
+				document.removeEventListener('keydown', currentListener);
+			}
+			currentListener = newListener;
+			document.addEventListener('keydown', currentListener);
 		}
-		currentListener = this.states[state].listener;
-		document.addEventListener('keydown', currentListener);
 		await this.states[state].update();
 	},
 };
 
 state_machine.transition('start')
-
-// Instructions panel toggle
-document.getElementById('toggle-instructions').addEventListener('click', function() {
-	const panel = document.getElementById('instructions');
-	const icon = this.querySelector('.toggle-icon');
-	const isCollapsed = panel.classList.toggle('collapsed');
-	
-	// Update icon and ARIA
-	icon.textContent = isCollapsed ? '+' : '−';
-	this.setAttribute('aria-expanded', !isCollapsed);
-});
