@@ -42,6 +42,11 @@ const ctx = canvas.getContext("2d");
 ctx.scale(dpr, dpr);
 ctx.font = "bold 32px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
 
+// Cache DOM elements
+const scoreValueElem = document.getElementById('score-value');
+const speedValueElem = document.getElementById('speed-value');
+const bufferValueElem = document.getElementById('buffer-value');
+
 // Gameplay modifiers
 const opts = {
 	init_speed: 25,
@@ -81,6 +86,8 @@ let speed;
 let buffer;
 let animationFrameId;
 let lastFrameTime;
+let lastDisplayedScore;
+let lastDisplayedSpeed;
 
 // Instantiate variables
 const initialize = function () {
@@ -89,9 +96,11 @@ const initialize = function () {
 	cycles = 0;
 	speed = opts.init_speed;
 	buffer = "";
-	document.getElementById('score-value').innerText = score;
-	document.getElementById('speed-value').innerText = speed;
-	document.getElementById('buffer-value').innerText = buffer || '...';
+	lastDisplayedScore = score;
+	lastDisplayedSpeed = speed;
+	scoreValueElem.innerText = score;
+	speedValueElem.innerText = speed;
+	bufferValueElem.innerText = buffer || '...';
 	
 	// Update high score display
 	highScore = getHighScore();
@@ -105,6 +114,29 @@ class Word {
 		this.speed = speed;
 	}
 }
+
+const findNonOverlappingY = function() {
+	const minSpacing = 50;
+	const maxAttempts = 10;
+	
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		const y = randomNumber(opts.min_word_y, h);
+		let hasOverlap = false;
+		
+		for (const word of words) {
+			if (Math.abs(word.y - y) < minSpacing) {
+				hasOverlap = true;
+				break;
+			}
+		}
+		
+		if (!hasOverlap) {
+			return y;
+		}
+	}
+	
+	return randomNumber(opts.min_word_y, h);
+};
 
 const gameTick = function (currentTime) {
 	// Continue animation loop first
@@ -124,11 +156,14 @@ const gameTick = function (currentTime) {
 	cycles += 1;
 	if (cycles % opts.speed_cycles == 0){
 		speed = Math.round(speed * opts.speed_increase);
-		document.getElementById('speed-value').innerText = speed;
+		if (speed !== lastDisplayedSpeed) {
+			speedValueElem.innerText = speed;
+			lastDisplayedSpeed = speed;
+		}
 	}
 	ctx.clearRect(0, 0, w, h);
 	if (Math.random() < opts.spawn_chance) {
-		words.push(new Word(randomWord(), w, randomNumber(opts.min_word_y, h), speed));
+		words.push(new Word(randomWord(), w, findNonOverlappingY(), speed));
 	}
 	for (let i = 0; i < words.length; i++) {
 		const word = words[i];
@@ -149,22 +184,26 @@ const gameTick = function (currentTime) {
 };
 
 const gameListener = async function (event) {
+	// Prevent key repeat from holding down keys
+	if (event.repeat) {
+		return;
+	}
+	
 	let key = event.key;
 	// Only accept alphanumerics, backspace and space
 	if (!key.match(/^[a-z0-9 ]$/i) && key !== 'Backspace' && key !== 'Enter') {
 		return;
 	}
-	// Capitalize key if shift is pressed
-	if (event.shiftKey) {
-		key = key.toUpperCase();
-	}
-	const bufferElem = document.getElementById('buffer-value');
+	
 	if (key === ' ' || key === 'Enter') {
 		for (let i = 0; i < words.length; i++) {
 			const word = words[i];
 			if (word.text === buffer) {
 				score += Math.round(word.text.length * speed / opts.points_multiplier);
-				document.getElementById('score-value').innerText = score;
+				if (score !== lastDisplayedScore) {
+					scoreValueElem.innerText = score;
+					lastDisplayedScore = score;
+				}
 				words.splice(i, 1);
 				break;
 			}
@@ -175,7 +214,7 @@ const gameListener = async function (event) {
 	} else {
 		buffer += key;
 	}
-	bufferElem.innerText = buffer || '...';
+	bufferValueElem.innerText = buffer || '...';
 }
 
 const startListener = function(event) {
@@ -268,10 +307,10 @@ const state_machine = {
 	},
 	transition: async function (state) {
 		if (currentListener) {
-			document.removeEventListener('keyup', currentListener);
+			document.removeEventListener('keydown', currentListener);
 		}
 		currentListener = this.states[state].listener;
-		document.addEventListener('keyup', currentListener);
+		document.addEventListener('keydown', currentListener);
 		await this.states[state].update();
 	},
 };
